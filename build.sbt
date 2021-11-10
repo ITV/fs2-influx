@@ -1,5 +1,6 @@
 import sbt._
 import ReleaseTransformations._
+import sbt.Keys.name
 
 Global / bloopExportJarClassifiers := Some(Set("sources"))
 
@@ -21,7 +22,7 @@ val commonSettings: Seq[Setting[_]] = Seq(
   ThisBuild / pomIncludeRepository          := { _ => false },
   publishMavenStyle                         := true,
   pomExtra :=
-    <url>https://github.com/ITV/quartz4s</url>
+    <url>https://github.com/ITV/fs2-influx</url>
       <developers>
         <developer>
           <id>jbwheatley</id>
@@ -32,11 +33,6 @@ val commonSettings: Seq[Setting[_]] = Seq(
       </developers>
 )
 
-def createProject(projectName: String): Project =
-  Project(projectName, file(projectName))
-    .settings(commonSettings)
-    .settings(name := s"fs2-influx-$projectName")
-
 lazy val root = (project in file("."))
   .aggregate(core, docs)
   .settings(commonSettings)
@@ -44,8 +40,11 @@ lazy val root = (project in file("."))
     publish / skip := true
   )
 
-lazy val core = createProject("core")
+lazy val core = project
+  .in(file("fs2-influx"))
+  .settings(commonSettings)
   .settings(
+    name := "fs2-influx",
     libraryDependencies ++= Seq(
       "org.influxdb"   % "influxdb-java"                 % "2.21",
       "co.fs2"        %% "fs2-core"                      % "3.2.2",

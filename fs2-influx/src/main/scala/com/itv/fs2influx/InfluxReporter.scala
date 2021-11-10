@@ -26,7 +26,7 @@ trait InfluxReporter[F[_]] {
 }
 
 object InfluxReporter {
-  def blocking[F[_]: Sync](
+  def sync[F[_]: Sync](
       config: InfluxDbConfig,
       tags: Map[String, String]
   ): Resource[F, BlockingInfluxReporter[F]] = {
@@ -75,7 +75,7 @@ object InfluxReporter {
   sealed abstract class BlockingInfluxReporter[F[_]: Sync: Random](
       val underlying: InfluxDB,
       tags: Map[String, String]
-  ) extends InfluxReporter[F] {
+  ) extends TaggedInfluxReporter[F](tags) {
     def write(builder: Point.Builder): F[Unit] =
       Clock[F].realTime.flatMap { now =>
         addRandomNanos[F](now).flatMap { timeInNanos =>
@@ -88,8 +88,6 @@ object InfluxReporter {
           }
         }.void
       }
-
-    def point(measurement: String): Point.Builder = Point.measurement(measurement).tag(tags.asJava)
   }
 
   sealed abstract class AsyncInfluxReporter[F[_]: Async: Random](
@@ -97,15 +95,12 @@ object InfluxReporter {
       channel: Channel[F, Point],
       config: InfluxDbConfig,
       tags: Map[String, String]
-  ) extends InfluxReporter[F] {
+  ) extends TaggedInfluxReporter[F](tags) {
 
     val batching: BatchingConfig.Enabled = config.batching match {
       case BatchingConfig.Disabled   => BatchingConfig.defaults
       case b: BatchingConfig.Enabled => b
     }
-
-    override def point(measurement: String): Point.Builder =
-      Point.measurement(measurement).tag(tags.asJava)
 
     override def write(builder: Point.Builder): F[Unit] =
       Clock[F].realTime.flatMap { now =>
@@ -150,5 +145,9 @@ object InfluxReporter {
       case NonFatal(_) => Stream.sleep[F]((2 * count).seconds) >> loop(program, count + 1)
       case _           => ???
     }
+  }
+
+  sealed abstract class TaggedInfluxReporter[F[_]](tags: Map[String, String]) extends InfluxReporter[F] {
+    override def point(measurement: String): Point.Builder = Point.measurement(measurement).tag(tags.asJava)
   }
 }
