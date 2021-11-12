@@ -49,6 +49,7 @@ object InfluxReporter {
 
   def async[F[_]: Async](
       config: InfluxDbConfig,
+      batchingConfig: BatchingConfig,
       tags: Map[String, String]
   ): Resource[F, AsyncInfluxReporter[F]] = {
     val underlying: InfluxDB =
@@ -61,7 +62,7 @@ object InfluxReporter {
 
     val influx = Channel.unbounded[F, Point].flatMap { channel =>
       Random.javaUtilRandom[F](new java.util.Random()).map { implicit r =>
-        new AsyncInfluxReporter[F](underlying, channel, config, tags) {}
+        new AsyncInfluxReporter[F](underlying, channel, batchingConfig, tags) {}
       }
     }
 
@@ -93,14 +94,9 @@ object InfluxReporter {
   sealed abstract class AsyncInfluxReporter[F[_]: Async: Random](
       val underlying: InfluxDB,
       channel: Channel[F, Point],
-      config: InfluxDbConfig,
+      batchingConfig: BatchingConfig,
       tags: Map[String, String]
   ) extends TaggedInfluxReporter[F](tags) {
-
-    val batching: BatchingConfig.Enabled = config.batching match {
-      case BatchingConfig.Disabled   => BatchingConfig.defaults
-      case b: BatchingConfig.Enabled => b
-    }
 
     override def write(builder: Point.Builder): F[Unit] =
       Clock[F].realTime.flatMap { now =>
@@ -119,7 +115,7 @@ object InfluxReporter {
           Spawn[F].start {
             loop(
               channel.stream
-                .groupWithin(batching.batchSize, batching.flushDuration)
+                .groupWithin(batchingConfig.batchSize, batchingConfig.flushDuration)
                 .evalMap { points =>
                   val batchPoints = BatchPoints
                     .builder()
@@ -134,9 +130,9 @@ object InfluxReporter {
         .map(_.join)
 
     private def shutdown(fiber: Fiber[F, Throwable, Unit]): F[Unit] =
-      channel.close.void *>                          // Stream should consume all remaining queued elements
-        Temporal[F].sleep(batching.flushDuration) *> // wait for stream to flush last batch
-        Sync[F].delay(underlying.flush()) *>         // influx should write remaining to db
+      channel.close.void *>                                // Stream should consume all remaining queued elements
+        Temporal[F].sleep(batchingConfig.flushDuration) *> // wait for stream to flush last batch
+        Sync[F].delay(underlying.flush()) *>               // influx should write remaining to db
         Sync[F].delay(underlying.close()) *>
         fiber.cancel
 

@@ -8,6 +8,5 @@ final case class InfluxDbConfig(
     password: String,
     databaseName: String,
     retentionPolicy: InfluxRetentionPolicy,
-    batching: BatchingConfig,
     logLevel: LogLevel
 )

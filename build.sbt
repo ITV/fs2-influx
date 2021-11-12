@@ -34,7 +34,7 @@ val commonSettings: Seq[Setting[_]] = Seq(
 )
 
 lazy val root = (project in file("."))
-  .aggregate(core, docs)
+  .aggregate(core, http4s, docs)
   .settings(commonSettings)
   .settings(
     publish / skip := true
@@ -53,6 +53,17 @@ lazy val core = project
       "org.typelevel" %% "munit-cats-effect-3"           % "1.0.6"   % Test
     )
   )
+
+lazy val http4s = project
+  .in(file("fs2-influx-http4s"))
+  .settings(commonSettings)
+  .settings(
+    name := "fs2-influx-http4s",
+    libraryDependencies ++= Seq(
+      "org.http4s" %% "http4s-core" % "0.23.6"
+    )
+  )
+  .dependsOn(core)
 
 lazy val docs = project
   .in(file("fs2-influx-docs"))
